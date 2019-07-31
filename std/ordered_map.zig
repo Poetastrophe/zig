@@ -39,8 +39,8 @@ pub fn OrderedMap(comptime K: type, comptime V: type, comptime compareFn: fn (a:
         }
 
         fn internalCompareFn(a: *rb.Node, b: *rb.Node) mem.Compare {
-            const keyA = getSatelliteData(anode).key_value.key;
-            const keyB = getSatelliteData(bnode).key_value.key;
+            const keyA = getSatelliteData(a).key_value.key;
+            const keyB = getSatelliteData(b).key_value.key;
             return compareFn(keyA, keyB);
         }
 
@@ -56,21 +56,21 @@ pub fn OrderedMap(comptime K: type, comptime V: type, comptime compareFn: fn (a:
 
         // Ignore deinit for now
         //
-        // pub fn deinit(om: Self) void {
-        //     deinitHelper(om, om.tree.root);
-        // }
+        pub fn deinit(om: Self) void {
+            deinitHelper(om, om.tree.root);
+        }
 
-        // fn deinitHelper(om: Self, cur_node: ?*rb.Node) void {
-        //     if (cur_node) |non_null_cur_node| {
-        //         const child1 = non_null_cur_node.left;
-        //         const child2 = non_null_cur_node.right;
-        //         om.allocator.destroy(getSatelliteData(non_null_cur_node));
-        //         deinitHelper(om, child1);
-        //         deinitHelper(om, child2);
-        //     } else {
-        //         return;
-        //     }
-        // }
+        fn deinitHelper(om: Self, cur_node: ?*rb.Node) void {
+            if (cur_node) |non_null_cur_node| {
+                const child1 = non_null_cur_node.left;
+                const child2 = non_null_cur_node.right;
+                om.allocator.destroy(getSatelliteData(non_null_cur_node));
+                deinitHelper(om, child1);
+                deinitHelper(om, child2);
+            } else {
+                return;
+            }
+        }
 
         pub fn clear(om: *Self) void {
             om.size = 0;
@@ -269,7 +269,7 @@ test "Insert values and then clean them up" {
 }
 
 test "assert root is not null" {
-    const allocator = std.heap.c_allocator;
+    const allocator = std.heap.direct_allocator;
     var map = OrderedMap(u32, u32, testCompareFn).init(allocator);
     defer map.deinit();
 
