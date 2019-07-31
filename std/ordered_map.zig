@@ -113,18 +113,6 @@ pub fn OrderedMap(comptime K: type, comptime V: type, comptime compareFn: fn (a:
         }
     };
 }
-
-fn testCompareFn(a: u32, b: u32) mem.Compare {
-    if (a < b) {
-        return mem.Compare.LessThan;
-    } else if (a == b) {
-        return mem.Compare.Equal;
-    } else if (a > b) {
-        return mem.Compare.GreaterThan;
-    }
-    unreachable;
-}
-
 fn testGetNumber(node: *rb.Node) *testNumber {
     return @fieldParentPtr(testNumber, "node", node);
 }
@@ -135,15 +123,12 @@ fn testManualCompareFn(l: *rb.Node, r: *rb.Node) mem.Compare {
     return testCompareFn(left.value, right.value);
 }
 
-fn testDumberCompareFn(l: *rb.Node, r: *rb.Node) mem.Compare {
-    var left = testGetNumber(l);
-    var right = testGetNumber(r);
-
-    if (left.value < right.value) {
+fn testCompareFn(a: u32, b: u32) mem.Compare {
+    if (a < b) {
         return mem.Compare.LessThan;
-    } else if (left.value == right.value) {
+    } else if (a == b) {
         return mem.Compare.Equal;
-    } else if (left.value > right.value) {
+    } else if (a > b) {
         return mem.Compare.GreaterThan;
     }
     unreachable;
