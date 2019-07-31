@@ -1,5 +1,4 @@
 // Ordered map
-// Ordered map will be similar to the c++ implementation
 // Memory is owned by the callee (i.e. the data will live as long as the datastructure), but the caller supplies an allocator.
 // Ordered set can be trivially implemented using Ordered map
 // And have nice methods like lower bound and upper bound
@@ -10,14 +9,6 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const rb = std.rb;
 const debug = std.debug;
-
-pub fn TestFn(a: u32, b: u32) i2 {
-    if (a > b) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
 
 pub fn OrderedMap(comptime K: type, comptime V: type, comptime compareFn: fn (a: K, b: K) mem.Compare) type {
     return struct {
@@ -32,26 +23,24 @@ pub fn OrderedMap(comptime K: type, comptime V: type, comptime compareFn: fn (a:
             value: V,
         };
 
-        pub const NodeKVTuple = struct {
-            keyValueTuple: KV,
+        pub const NodeKVPair = struct {
+            key_value: KV,
             node: rb.Node,
-            pub fn init(data: KV) NodeKVTuple {
-                return NodeKVTuple{
-                    .keyValueTuple = data,
+            pub fn init(data: KV) NodeKVPair {
+                return NodeKVPair{
+                    .key_value = data,
                     .node = undefined,
                 };
             }
         };
 
-        pub fn getNodeAndAssociatedData(node: *rb.Node) *NodeKVTuple {
-            return @fieldParentPtr(NodeKVTuple, "node", node);
+        pub fn getSatelliteData(node: *rb.Node) *NodeKVPair {
+            return @fieldParentPtr(NodeKVPair, "node", node);
         }
 
         fn internalCompareFn(a: *rb.Node, b: *rb.Node) mem.Compare {
-            var anode = a;
-            var bnode = b;
-            const keyB = getNodeAndAssociatedData(bnode).keyValueTuple.key;
-            const keyA = getNodeAndAssociatedData(anode).keyValueTuple.key;
+            const keyA = getSatelliteData(anode).key_value.key;
+            const keyB = getSatelliteData(bnode).key_value.key;
             return compareFn(keyA, keyB);
         }
 
@@ -65,21 +54,23 @@ pub fn OrderedMap(comptime K: type, comptime V: type, comptime compareFn: fn (a:
             return res;
         }
 
-        pub fn deinit(om: Self) void {
-            deinitHelper(om, om.tree.root);
-        }
+        // Ignore deinit for now
+        //
+        // pub fn deinit(om: Self) void {
+        //     deinitHelper(om, om.tree.root);
+        // }
 
-        fn deinitHelper(om: Self, curNode: ?*rb.Node) void {
-            if (curNode) |nonNullCurNode| {
-                const child1 = nonNullCurNode.left;
-                const child2 = nonNullCurNode.right;
-                om.allocator.destroy(getNodeAndAssociatedData(nonNullCurNode));
-                deinitHelper(om, child1);
-                deinitHelper(om, child2);
-            } else {
-                return;
-            }
-        }
+        // fn deinitHelper(om: Self, cur_node: ?*rb.Node) void {
+        //     if (cur_node) |non_null_cur_node| {
+        //         const child1 = non_null_cur_node.left;
+        //         const child2 = non_null_cur_node.right;
+        //         om.allocator.destroy(getSatelliteData(non_null_cur_node));
+        //         deinitHelper(om, child1);
+        //         deinitHelper(om, child2);
+        //     } else {
+        //         return;
+        //     }
+        // }
 
         pub fn clear(om: *Self) void {
             om.size = 0;
@@ -90,29 +81,29 @@ pub fn OrderedMap(comptime K: type, comptime V: type, comptime compareFn: fn (a:
             return self.size;
         }
 
-        fn createNode(keyValueTuple: KV, allocator: *Allocator) !*NodeKVTuple {
-            var node = try allocator.create(NodeKVTuple);
-            node.* = NodeKVTuple.init(keyValueTuple);
+        fn createNode(key_value: KV, allocator: *Allocator) !*NodeKVPair {
+            var node = try allocator.create(NodeKVPair);
+            node.* = NodeKVPair.init(key_value);
             return node;
         }
 
         /// get returns a key value pair matching the key, if found, otherwise null.
         pub fn get(om: *Self, key: K) ?*KV {
-            var lookupTuple = NodeKVTuple.init(KV{ .key = key, .value = undefined });
-            if (om.tree.lookup(&lookupTuple.node)) |nodePtr| {
-                return &getNodeAndAssociatedData(nodePtr).keyValueTuple;
+            var lookup_tuple = NodeKVPair.init(KV{ .key = key, .value = undefined });
+            if (om.tree.lookup(&lookup_tuple.node)) |nodePtr| {
+                return &getSatelliteData(nodePtr).key_value;
             }
             return null;
         }
 
         /// put returns the previous key value pair matching the key if it is in the tree (and it does clobber), otherwise it returns null.
         pub fn put(self: *Self, key: K, value: V) !?KV {
-            var lookupTuple = NodeKVTuple.init(KV{ .key = key, .value = undefined });
-            if (self.tree.lookup(&lookupTuple.node)) |prevEntry| {
-                var prevParentPointer: *NodeKVTuple = getNodeAndAssociatedData(prevEntry);
-                var prevKV: KV = prevParentPointer.keyValueTuple;
-                prevParentPointer.keyValueTuple = KV{ .key = key, .value = value };
-                return prevKV;
+            var lookup_tuple = NodeKVPair.init(KV{ .key = key, .value = undefined });
+            if (self.tree.lookup(&lookup_tuple.node)) |prev_entry| {
+                var prev_parent_pointer: *NodeKVPair = getSatelliteData(prev_entry);
+                var prev_kv: KV = prev_parent_pointer.key_value;
+                prev_parent_pointer.key_value = KV{ .key = key, .value = value };
+                return prev_kv;
             } else {
                 var nodeTuple = try createNode(KV{ .key = key, .value = value }, self.allocator);
                 var newNode = nodeTuple.node;
@@ -188,39 +179,38 @@ test "put" {
     _ = try map.put(14, 1000);
 }
 
-test "Extracting KV from NodeKVTuple" {
+test "Extracting KV from NodeKVPair" {
     const allocator = debug.global_allocator;
     const map = OrderedMap(u32, u32, testCompareFn);
-    var someVar = map.NodeKVTuple{ .keyValueTuple = map.KV{ .key = 42, .value = 1234 }, .node = undefined };
-    assert(map.getNodeAndAssociatedData(&someVar.node).keyValueTuple.key == 42);
-    assert(map.getNodeAndAssociatedData(&someVar.node).keyValueTuple.value == 1234);
+    var someVar = map.NodeKVPair{ .key_value = map.KV{ .key = 42, .value = 1234 }, .node = undefined };
+    assert(map.getSatelliteData(&someVar.node).key_value.key == 42);
+    assert(map.getSatelliteData(&someVar.node).key_value.value == 1234);
 }
 
 test "Testing internal tree without all the clutter" {
     const allocator = std.heap.direct_allocator;
     const mapVals = OrderedMap(u32, u32, testCompareFn);
     var map = mapVals.init(allocator);
-    var number = mapVals.NodeKVTuple{ .keyValueTuple = mapVals.KV{ .key = 42, .value = 1234 }, .node = undefined };
+    var number = mapVals.NodeKVPair{ .key_value = mapVals.KV{ .key = 42, .value = 1234 }, .node = undefined };
     _ = map.tree.insert(&number.node);
-    var dup = mapVals.NodeKVTuple{ .keyValueTuple = mapVals.KV{ .key = 42, .value = 1234 }, .node = undefined };
+    var dup = mapVals.NodeKVPair{ .key_value = mapVals.KV{ .key = 42, .value = 1234 }, .node = undefined };
     assert(map.tree.lookup(&dup.node) == &number.node);
     _ = map.tree.insert(&dup.node);
     assert(&dup.node != &number.node);
 }
 
-//TODO: This test is not sufficient. How come accessing the contents not cause a panic?
 test "Test allocation" {
     const allocator = std.heap.direct_allocator;
     const mapVals = OrderedMap(u32, u32, testCompareFn);
-    var node: *mapVals.NodeKVTuple = undefined;
+    var node: *mapVals.NodeKVPair = undefined;
     {
         //Trash node when going out of scope
         var dup = mapVals.KV{ .key = 42, .value = 1234 };
-        var extractNode: *mapVals.NodeKVTuple = try mapVals.createNode(dup, allocator);
+        var extractNode: *mapVals.NodeKVPair = try mapVals.createNode(dup, allocator);
         node = extractNode;
     }
-    assert(node.keyValueTuple.key == 42);
-    assert(node.keyValueTuple.value == 1234);
+    assert(node.key_value.key == 42);
+    assert(node.key_value.value == 1234);
     allocator.destroy(node);
 }
 
@@ -230,7 +220,7 @@ test "put multiple values" {
     const allocator = std.heap.direct_allocator;
     var map = OrderedMap(u32, u32, testCompareFn).init(allocator);
     const mapVals = OrderedMap(u32, u32, testCompareFn);
-    const getNode = mapVals.getNodeAndAssociatedData;
+    const getNode = mapVals.getSatelliteData;
 
     _ = try map.put(14, 0);
     _ = try map.put(20, 1);
@@ -238,18 +228,18 @@ test "put multiple values" {
     _ = try map.put(1234, 3);
 }
 
-//Value is NodeKVTuple{ .keyValueTuple = KV{ .key = 2400459200, .value = 32766 }, .node = Node{ .left = null, .right = null, .parent_and_color = 0 } }
+//Value is NodeKVPair{ .key_value = KV{ .key = 2400459200, .value = 32766 }, .node = Node{ .left = null, .right = null, .parent_and_color = 0 } }
 //Seems like {14, 0} is never inserted
 test "Check if put actually puts anything" {
     const allocator = std.heap.direct_allocator;
     var map = OrderedMap(u32, u32, testCompareFn).init(allocator);
     const mapVals = OrderedMap(u32, u32, testCompareFn);
-    const getNode = mapVals.getNodeAndAssociatedData;
+    const getNode = mapVals.getSatelliteData;
 
     _ = try map.put(14, 0);
     var first = getNode(map.tree.first().?);
     std.debug.warn("Value is {} \n", first);
-    assert(first.keyValueTuple.value == 0);
+    assert(first.key_value.value == 0);
     // first = getNode(map.tree.first().?
     // assert(map.tree.first());
 }
@@ -270,7 +260,7 @@ test "Insert values and then clean them up" {
     defer map.deinit();
 
     const mapVals = OrderedMap(u32, u32, testCompareFn);
-    const getNode = mapVals.getNodeAndAssociatedData;
+    const getNode = mapVals.getSatelliteData;
 
     _ = try map.put(14, 0);
     _ = try map.put(20, 1);
@@ -284,7 +274,7 @@ test "assert root is not null" {
     defer map.deinit();
 
     const mapVals = OrderedMap(u32, u32, testCompareFn);
-    const getNode = mapVals.getNodeAndAssociatedData;
+    const getNode = mapVals.getSatelliteData;
 
     _ = try map.put(14, 0);
     // _ = try map.put(20, 1);
